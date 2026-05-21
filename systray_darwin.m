@@ -109,10 +109,6 @@ withParentMenuId: (int)theParentMenuId
       return event;
     }
 
-    if (event.modifierFlags & NSEventModifierFlagCommand) {
-      return event;
-    }
-
     [self leftMouseClicked];
 
     return nil;
