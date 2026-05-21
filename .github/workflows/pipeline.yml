@@ -49,3 +49,30 @@ jobs:
             echo "|---|---|---|---|"
             echo "| \`${{ steps.detect.outputs.upstream-tag }}\` | ${{ steps.detect.outputs.upstream-version }} | \`${{ steps.detect.outputs.fork-tag }}\` | ${{ steps.detect.outputs.should-build }} |"
           } >> "$GITHUB_STEP_SUMMARY"
+
+  # -------------------------------------------------------------------
+  # sync-fork: fast-forward master + push the new upstream tag to fork
+  # -------------------------------------------------------------------
+  sync-fork:
+    needs: detect-upstream
+    if: needs.detect-upstream.outputs.should-build == 'true'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          token: ${{ github.token }}
+      - name: Sync upstream master and tag to fork
+        env:
+          UPSTREAM_TAG: ${{ needs.detect-upstream.outputs.upstream-tag }}
+        run: |
+          git config user.email "systray-pipeline@local"
+          git config user.name  "systray-pipeline"
+          git remote add upstream "https://github.com/${{ env.UPSTREAM_REPO }}.git"
+          git fetch upstream master --tags
+
+          git push origin \
+            "refs/remotes/upstream/master:refs/heads/master" \
+            --force
+
+          git push origin "refs/tags/${UPSTREAM_TAG}" --force
