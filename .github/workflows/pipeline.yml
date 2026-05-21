@@ -133,3 +133,23 @@ jobs:
           )"
             exit 1
           fi
+
+  # -------------------------------------------------------------------
+  # verify: build and test the patched tree at the new fork tag
+  # -------------------------------------------------------------------
+  verify:
+    needs: [detect-upstream, rebase-patches]
+    if: needs.detect-upstream.outputs.should-build == 'true'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.detect-upstream.outputs.fork-tag }}
+          fetch-depth: 1
+      - uses: actions/setup-go@v5
+        with:
+          go-version: 'stable'
+      - name: Build
+        run: go build ./...
+      - name: Test
+        run: go test ./...
