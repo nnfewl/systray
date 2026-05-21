@@ -25,7 +25,7 @@ import (
 
 const (
 	path     = "/StatusNotifierItem"
-	menuPath = "/StatusNotifierItem/menu"
+	menuPath = "/StatusNotifierMenu"
 )
 
 var (
@@ -61,6 +61,35 @@ func SetIcon(iconBytes []byte) {
 
 	props.SetMust("org.kde.StatusNotifierItem", "IconPixmap",
 		[]PX{convertToPixels(iconBytes)})
+	if conn == nil {
+		return
+	}
+
+	err := notifier.Emit(conn, &notifier.StatusNotifierItem_NewIconSignal{
+		Path: path,
+		Body: &notifier.StatusNotifierItem_NewIconSignalBody{},
+	})
+	if err != nil {
+		log.Printf("systray error: failed to emit new icon signal: %s\n", err)
+		return
+	}
+}
+
+// SetIconName sets the systray icon by theme icon name.
+// The desktop will look up the icon from the current icon theme.
+func SetIconName(name string) {
+	instance.lock.Lock()
+	instance.iconName = name
+	props := instance.props
+	conn := instance.conn
+	defer instance.lock.Unlock()
+
+	if props == nil {
+		return
+	}
+
+	props.SetMust("org.kde.StatusNotifierItem", "IconName", name)
+	props.SetMust("org.kde.StatusNotifierItem", "IconPixmap", []PX{})
 	if conn == nil {
 		return
 	}
@@ -124,7 +153,6 @@ func SetTooltip(tooltipTitle string) {
 	instance.lock.Lock()
 	instance.tooltipTitle = tooltipTitle
 	props := instance.props
-	conn := instance.conn
 	defer instance.lock.Unlock()
 
 	if props == nil {
@@ -134,19 +162,6 @@ func SetTooltip(tooltipTitle string) {
 		dbus.MakeVariant(tooltip{V2: tooltipTitle}))
 	if dbusErr != nil {
 		log.Printf("systray error: failed to set ToolTip prop: %s\n", dbusErr)
-		return
-	}
-
-	if conn == nil {
-		return
-	}
-
-	err := notifier.Emit(conn, &notifier.StatusNotifierItem_NewToolTipSignal{
-		Path: path,
-		Body: &notifier.StatusNotifierItem_NewToolTipSignalBody{},
-	})
-	if err != nil {
-		log.Printf("systray error: failed to emit new tooltip signal: %s\n", err)
 		return
 	}
 }
@@ -317,6 +332,8 @@ type tray struct {
 
 	// icon data for the main systray icon
 	iconData []byte
+	// icon name for theme-based icon lookup
+	iconName string
 	// title and tooltip state
 	title, tooltipTitle string
 
@@ -325,6 +342,13 @@ type tray struct {
 	menuLock         sync.RWMutex
 	props, menuProps *prop.Properties
 	menuVersion      uint32
+}
+
+func (t *tray) iconPixmapForSpec() []PX {
+	if t.iconName != "" {
+		return []PX{}
+	}
+	return []PX{convertToPixels(t.iconData)}
 }
 
 func (t *tray) createPropSpec() map[string]map[string]*prop.Prop {
@@ -361,13 +385,13 @@ func (t *tray) createPropSpec() map[string]map[string]*prop.Prop {
 				Callback: nil,
 			},
 			"IconName": {
-				Value:    "",
-				Writable: false,
+				Value:    t.iconName,
+				Writable: true,
 				Emit:     prop.EmitTrue,
 				Callback: nil,
 			},
 			"IconPixmap": {
-				Value:    []PX{convertToPixels(t.iconData)},
+				Value:    t.iconPixmapForSpec(),
 				Writable: true,
 				Emit:     prop.EmitTrue,
 				Callback: nil,

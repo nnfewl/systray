@@ -59,7 +59,10 @@
 <signal name="NewIcon"> </signal>
 <signal name="NewAttentionIcon"> </signal>
 <signal name="NewOverlayIcon"> </signal>
-<signal name="NewToolTip"></signal>
+<!--  We disable this as we don't support tooltip, so no need to go through it
+    <signal name="NewToolTip">
+    </signal>
+     -->
 <signal name="NewStatus">
 <arg name="status" type="s"/>
 </signal>
