@@ -1,0 +1,51 @@
+name: Pipeline
+
+on:
+  schedule:
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+    inputs:
+      force_rebuild:
+        description: 'Rebuild even if fork tag exists'
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: release-pipeline
+  cancel-in-progress: false
+
+env:
+  UPSTREAM_REPO: fyne-io/systray
+
+jobs:
+  # -------------------------------------------------------------------
+  # detect-upstream
+  # -------------------------------------------------------------------
+  detect-upstream:
+    runs-on: ubuntu-24.04
+    outputs:
+      upstream-tag:     ${{ steps.detect.outputs.upstream-tag }}
+      upstream-version: ${{ steps.detect.outputs.upstream-version }}
+      fork-tag:         ${{ steps.detect.outputs.fork-tag }}
+      should-build:     ${{ steps.detect.outputs.should-build }}
+      today:            ${{ steps.detect.outputs.today }}
+    steps:
+      - uses: actions/checkout@v6
+      - name: Detect latest upstream release tag
+        id: detect
+        env:
+          GH_TOKEN: ${{ github.token }}
+          FORCE_REBUILD: ${{ inputs.force_rebuild || 'false' }}
+        run: bash scripts/detect-upstream.sh
+      - name: Summary
+        run: |
+          {
+            echo "### Upstream state"
+            echo "| Tag | Version | Fork tag | Needs build? |"
+            echo "|---|---|---|---|"
+            echo "| \`${{ steps.detect.outputs.upstream-tag }}\` | ${{ steps.detect.outputs.upstream-version }} | \`${{ steps.detect.outputs.fork-tag }}\` | ${{ steps.detect.outputs.should-build }} |"
+          } >> "$GITHUB_STEP_SUMMARY"
