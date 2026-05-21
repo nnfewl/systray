@@ -76,3 +76,60 @@ jobs:
             --force
 
           git push origin "refs/tags/${UPSTREAM_TAG}" --force
+
+  # -------------------------------------------------------------------
+  # rebase-patches: rebase set-icon-name onto new upstream tag,
+  # push branch + v<UPSTREAM>-iconname tag. On conflict: open issue.
+  # -------------------------------------------------------------------
+  rebase-patches:
+    needs: [detect-upstream, sync-fork]
+    if: needs.detect-upstream.outputs.should-build == 'true'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          token: ${{ github.token }}
+      - name: Rebase set-icon-name and publish fork tag
+        env:
+          UPSTREAM_TAG: ${{ needs.detect-upstream.outputs.upstream-tag }}
+          FORK_TAG:     ${{ needs.detect-upstream.outputs.fork-tag }}
+          GH_TOKEN:     ${{ github.token }}
+        run: |
+          git config user.email "systray-pipeline@local"
+          git config user.name  "systray-pipeline"
+
+          git fetch origin set-icon-name "${UPSTREAM_TAG}"
+          git checkout set-icon-name
+
+          if git rebase "${UPSTREAM_TAG}"; then
+            git push origin set-icon-name --force-with-lease
+            git tag --force "${FORK_TAG}"
+            git push origin "${FORK_TAG}" --force
+          else
+            git rebase --abort
+            gh issue create \
+              --title "Rebase needed: set-icon-name onto ${UPSTREAM_TAG}" \
+              --label "automation" \
+              --body "$(cat <<EOF
+          Automated rebase of \`set-icon-name\` onto \`${UPSTREAM_TAG}\` failed due to conflicts.
+
+          ### Manual fix
+
+          \`\`\`bash
+          git fetch origin
+          git checkout set-icon-name
+          git rebase ${UPSTREAM_TAG}
+          # resolve conflicts, then:
+          git push origin set-icon-name --force-with-lease
+          \`\`\`
+
+          ### Re-run pipeline
+
+          \`\`\`bash
+          gh workflow run pipeline.yml --ref pipeline -f force_rebuild=true
+          \`\`\`
+          EOF
+          )"
+            exit 1
+          fi
